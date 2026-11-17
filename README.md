@@ -194,6 +194,7 @@ Sizes are counted in whitespace-separated words.
 | `sentence:5:1` | The same, with 1 sentence shared between neighbouring chunks. |
 | `paragraph:200` | Whole paragraphs, packed together up to 200 words. A longer paragraph is kept whole. |
 | `recursive:200` | Paragraphs, then sentences, then words, packed up to 200 words. Never exceeds the limit. |
+| `heading:300` | Split at top-level Markdown headings such as `## Setup` or an underlined heading. Sections over 300 words split at paragraphs first, then at sentences or words if needed. |
 
 Without `-s`, `chunkaudit run` compares nine of these: `fixed:100`, `fixed:200`, `fixed:200:50`, `fixed:400`, `sentence:3`, `sentence:5:1`, `sentence:10:2`, `paragraph:200` and `recursive:200`.
 

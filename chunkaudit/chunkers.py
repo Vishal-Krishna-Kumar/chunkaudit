@@ -12,6 +12,7 @@ Strategies are written as short specs so they can be passed on the command line:
     sentence:5:1     5 sentences per chunk, 1 sentence shared with the previous chunk
     paragraph:200    whole paragraphs, packed together up to 200 words
     recursive:200    paragraphs, then sentences, then words, packed up to 200 words
+    heading:300      Markdown sections, split further if they exceed 300 words
 """
 
 from __future__ import annotations
@@ -19,7 +20,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from .text import Span, count_words, paragraph_spans, sentence_spans, sentences_in, word_spans
+from .text import (
+    Span,
+    count_words,
+    markdown_section_spans,
+    paragraph_spans,
+    sentence_spans,
+    sentences_in,
+    word_spans,
+)
 
 
 class Chunker(Protocol):
@@ -157,11 +166,35 @@ class RecursiveChunker:
         return _pack(text, units, self.max_words)
 
 
+@dataclass(frozen=True)
+class HeadingChunker:
+    """Keep Markdown sections separate, splitting long sections by paragraph first."""
+
+    max_words: int
+
+    def __post_init__(self) -> None:
+        if self.max_words < 1:
+            raise ValueError("max_words must be at least 1")
+
+    @property
+    def name(self) -> str:
+        return f"heading:{self.max_words}"
+
+    def split(self, text: str) -> list[Span]:
+        chunker = RecursiveChunker(self.max_words)
+        return [
+            (start + inner_start, start + inner_end)
+            for start, end in markdown_section_spans(text)
+            for inner_start, inner_end in chunker.split(text[start:end])
+        ]
+
+
 _KINDS = {
     "fixed": (FixedChunker, 1, 2),
     "sentence": (SentenceChunker, 1, 2),
     "paragraph": (ParagraphChunker, 1, 1),
     "recursive": (RecursiveChunker, 1, 1),
+    "heading": (HeadingChunker, 1, 1),
 }
 
 DEFAULT_STRATEGIES = (

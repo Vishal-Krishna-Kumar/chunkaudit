@@ -76,7 +76,35 @@ def test_recursive_chunker_falls_back_to_sentences_then_words():
     ]
 
 
-@pytest.mark.parametrize("spec", [*DEFAULT_STRATEGIES, "fixed:7", "sentence:1", "recursive:12"])
+def test_heading_chunker_splits_sections_and_keeps_the_preamble():
+    text = "Preamble.\r\n\r\n# One\r\nFirst section.\r\n\r\nTwo\r\n---\r\nSecond section."
+    assert pieces(text, parse_strategy("heading:20").split(text)) == [
+        "Preamble.",
+        "# One\r\nFirst section.",
+        "Two\r\n---\r\nSecond section.",
+    ]
+
+
+def test_heading_chunker_ignores_headings_inside_fences():
+    text = "# Setup\n````md\n# Example\n```\nTitle\n---\n````\n## Next\nDone."
+    assert pieces(text, parse_strategy("heading:40").split(text)) == [
+        "# Setup\n````md\n# Example\n```\nTitle\n---\n````",
+        "## Next\nDone.",
+    ]
+
+
+def test_heading_chunker_splits_oversized_sections_at_paragraph_boundaries():
+    text = "# One\n\nOne two three.\n\nFour five six.\n\n# Two\nSeven."
+    assert pieces(text, parse_strategy("heading:5").split(text)) == [
+        "# One\n\nOne two three.",
+        "Four five six.",
+        "# Two\nSeven.",
+    ]
+
+
+@pytest.mark.parametrize(
+    "spec", [*DEFAULT_STRATEGIES, "fixed:7", "sentence:1", "recursive:12", "heading:12"]
+)
 def test_every_strategy_covers_every_word_of_the_sample_documents(spec):
     chunker = parse_strategy(spec)
     assert chunker.name == spec
@@ -95,7 +123,7 @@ def test_every_strategy_covers_every_word_of_the_sample_documents(spec):
         assert not missing
 
 
-@pytest.mark.parametrize("spec", ["fixed:50", "fixed:50:10", "recursive:50"])
+@pytest.mark.parametrize("spec", ["fixed:50", "fixed:50:10", "recursive:50", "heading:50"])
 def test_size_limits_are_respected(spec):
     chunker = parse_strategy(spec)
     for document in load_dataset(sample_path()).documents:
@@ -104,7 +132,7 @@ def test_size_limits_are_respected(spec):
 
 
 def test_chunkers_handle_empty_text():
-    for spec in ("fixed:5", "sentence:2", "paragraph:5", "recursive:5"):
+    for spec in ("fixed:5", "sentence:2", "paragraph:5", "recursive:5", "heading:5"):
         assert parse_strategy(spec).split("") == []
 
 
@@ -118,6 +146,8 @@ def test_chunkers_handle_empty_text():
         "fixed:0",
         "paragraph:10:2",
         "sentence:2:5",
+        "heading:0",
+        "heading:10:2",
     ],
 )
 def test_invalid_specs_are_rejected_with_the_spec_in_the_message(spec):

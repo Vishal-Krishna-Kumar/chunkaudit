@@ -7,12 +7,17 @@ always be traced back to the exact characters it covers.
 from __future__ import annotations
 
 import re
+from itertools import pairwise
 
 Span = tuple[int, int]
 
 _WORD = re.compile(r"\S+")
 _TOKEN = re.compile(r"[a-z0-9]+")
-_PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n\s*")
+_PARAGRAPH_BREAK = re.compile(r"\r?\n[ \t]*\r?\n\s*")
+_ATX_HEADING = re.compile(r" {0,3}#{1,6}(?:[ \t]|$)")
+_SETEXT_UNDERLINE = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
+_CODE_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
+_NON_PARAGRAPH = re.compile(r" {4}| {0,3}(?:>|[-+*](?:[ \t]|$)|\d{1,9}[.)](?:[ \t]|$)|\t)")
 # Sentence-ending punctuation, optional closing quotes or brackets, whitespace, and then
 # something that looks like the start of a new sentence.
 _SENTENCE_END = re.compile(r"""[.!?]+["')\]]*\s+(?=["'(\[]?[A-Z0-9])""")
@@ -49,6 +54,41 @@ def paragraph_spans(text: str) -> list[Span]:
         position = match.end()
     spans.append((position, len(text)))
     return [span for span in (_trim(text, start, end) for start, end in spans) if span]
+
+
+def markdown_section_spans(text: str) -> list[Span]:
+    """Split at top-level ATX and Setext headings outside fenced code blocks."""
+    boundaries = [0]
+    position = 0
+    paragraph_start = None
+    fence = ""
+    for raw_line in text.splitlines(keepends=True):
+        line_start = position
+        position += len(raw_line)
+        line = raw_line.rstrip("\r\n")
+        marker = _CODE_FENCE.match(line)
+        if fence:
+            if marker and marker[1].startswith(fence) and not marker[2].strip():
+                fence = ""
+            continue
+        if marker and (marker[1][0] == "~" or "`" not in marker[2]):
+            fence = marker[1]
+            paragraph_start = None
+        elif _ATX_HEADING.match(line):
+            boundaries.append(line_start)
+            paragraph_start = None
+        elif _SETEXT_UNDERLINE.fullmatch(line):
+            if paragraph_start is not None:
+                boundaries.append(paragraph_start)
+            paragraph_start = None
+        elif not line.strip() or _NON_PARAGRAPH.match(line):
+            paragraph_start = None
+        elif paragraph_start is None:
+            paragraph_start = line_start
+    boundaries.append(len(text))
+    return [
+        span for start, end in pairwise(boundaries) if (span := _trim(text, start, end)) is not None
+    ]
 
 
 def sentence_spans(text: str) -> list[Span]:
